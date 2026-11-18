@@ -1,0 +1,18 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*
+!.env.example
+.supabase/
+supabase/.temp/
+release/
+**/build/
+android/.gradle/
+android/local.properties
+*.jks
+*.keystore
+*.apk
+.DS_Store
+/Dark 3 - 反季节（我的爱还在不在）_H.ogg
+情侣网站实现方案.md

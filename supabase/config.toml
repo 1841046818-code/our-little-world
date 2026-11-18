@@ -1,0 +1,7 @@
+project_id = "your-supabase-project-id"
+
+[functions.purge-trash]
+verify_jwt = false
+
+[functions.care-ai]
+verify_jwt = true

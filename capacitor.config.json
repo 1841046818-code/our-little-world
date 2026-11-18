@@ -1,0 +1,13 @@
+{
+  "appId": "com.littleworld.couple",
+  "appName": "我们的小宇宙",
+  "webDir": "dist",
+  "android": {
+    "useLegacyBridge": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}
