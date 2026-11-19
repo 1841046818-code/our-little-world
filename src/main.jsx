@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App as NativeApp } from '@capacitor/app';
+import { Geolocation } from '@capacitor/geolocation';
 import {
   AudioLines, CalendarDays, Camera, Check, ChevronRight, Search,
   ChevronDown, Copy, Gift, Heart, House, LockKeyhole, LogOut, Mail, MapPin, Pencil,
@@ -791,6 +792,7 @@ function App() {
   useEffect(() => () => {
     const watcher = locationWatchRef.current;
     if (watcher?.type === 'native') BackgroundGeolocation.removeWatcher({ id: watcher.id });
+    else if (watcher?.type === 'capacitor') Geolocation.clearWatch({ id: watcher.id });
     else if (watcher?.type === 'web') navigator.geolocation?.clearWatch(watcher.id);
     else if (watcher !== null) navigator.geolocation?.clearWatch(watcher);
   }, []);
@@ -1172,6 +1174,7 @@ function App() {
       const watcher = locationWatchRef.current;
       locationWatchRef.current = null;
       if (watcher?.type === 'native') await BackgroundGeolocation.removeWatcher({ id: watcher.id });
+      else if (watcher?.type === 'capacitor') await Geolocation.clearWatch({ id: watcher.id });
       else if (watcher?.type === 'web') navigator.geolocation?.clearWatch(watcher.id);
       else navigator.geolocation?.clearWatch(watcher);
       setLocationSharing(false); setLocationRequestState('idle'); setOwnLocation(null); setOwnLocationUpdatedAt(null);
@@ -1250,27 +1253,30 @@ function App() {
     if (Capacitor.isNativePlatform() && !isDemo) {
       let watcherId;
       let watcherFailed = false;
-      const startWebFallback = message => {
-        if (!navigator.geolocation) {
-          locationWatchRef.current = null;
-          setLocationSharing(false);
-          setLocationRequestState('error');
-          setLocationError('手机定位服务没有返回坐标，且 App 内备用定位不可用。');
-          return;
-        }
+      const startNativeFallback = message => {
         setLocationError(message);
-        let webId;
-        webId = navigator.geolocation.watchPosition(position => {
-          syncPosition({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, time: position.timestamp });
-        }, error => {
+        Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 30000, timeout: 60000, enableLocationFallback: true }, (position, error) => {
+          if (error) {
+            clearTimeout(locationTimeout);
+            const watcher = locationWatchRef.current;
+            if (watcher?.type === 'capacitor') {
+              locationWatchRef.current = null;
+              Geolocation.clearWatch({ id: watcher.id }).catch(() => {});
+            }
+            setLocationSharing(false);
+            setLocationRequestState('error');
+            setLocationError(error.message || '手机定位服务没有返回坐标，请检查系统定位服务后重试。');
+            return;
+          }
+          if (position) syncPosition({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy, time: position.timestamp });
+        }).then(id => {
+          locationWatchRef.current = { type: 'capacitor', id };
+        }).catch(error => {
           clearTimeout(locationTimeout);
-          if (webId !== undefined) navigator.geolocation.clearWatch(webId);
-          if (locationWatchRef.current?.type === 'web' && locationWatchRef.current.id === webId) locationWatchRef.current = null;
           setLocationSharing(false);
           setLocationRequestState('error');
-          setLocationError(error.code === 1 ? 'App 内备用定位没有权限，请在系统设置中允许 App 定位后重试。' : error.code === 2 ? 'App 内备用定位无法确定当前位置，请重新请求定位。' : 'App 内备用定位等待超时，请重新请求定位。');
-        }, { enableHighAccuracy: true, maximumAge: 30000, timeout: 60000 });
-        locationWatchRef.current = { type: 'web', id: webId };
+          setLocationError(error?.message || 'App 系统定位不可用，请检查定位权限后重试。');
+        });
       };
       locationTimeout = window.setTimeout(() => {
         if (firstFixReceived) return;
@@ -1280,7 +1286,7 @@ function App() {
           locationWatchRef.current = null;
           BackgroundGeolocation.removeWatcher({ id: watcher.id }).catch(() => {});
         }
-        startWebFallback('原生定位服务没有返回坐标，正在切换 App 内备用定位…');
+        startNativeFallback('原生后台定位没有返回坐标，正在切换 Android 系统定位…');
       }, 20000);
       try {
         watcherId = await BackgroundGeolocation.addWatcher({
@@ -1299,7 +1305,7 @@ function App() {
               setLocationSharing(false);
               setLocationRequestState('error');
               setLocationError('系统未授予此应用定位权限。打开应用权限设置，允许定位后返回重试。');
-            } else startWebFallback(`${error.message || '原生定位服务暂不可用。'} 正在切换 App 内备用定位…`);
+            } else startNativeFallback(`${error.message || '原生后台定位服务暂不可用。'} 正在切换 Android 系统定位…`);
             return;
           }
           syncPosition(position);
@@ -1315,7 +1321,7 @@ function App() {
           locationWatchRef.current = null;
           setLocationRequestState('error');
           setLocationError('系统未授予此应用定位权限。打开应用权限设置，允许定位后返回重试。');
-        } else startWebFallback(`${error?.message || '原生定位服务暂不可用。'} 正在切换 App 内备用定位…`);
+        } else startNativeFallback(`${error?.message || '原生后台定位服务暂不可用。'} 正在切换 Android 系统定位…`);
       }
       return;
     }
