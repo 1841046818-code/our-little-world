@@ -2,6 +2,9 @@
   "appId": "com.littleworld.couple",
   "appName": "我们的小宇宙",
   "webDir": "dist",
+  "server": {
+    "hostname": "app.902lmr.aionex.cn"
+  },
   "android": {
     "useLegacyBridge": true
   },
